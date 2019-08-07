@@ -1,0 +1,177 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Resources": {
+
+        "AppBucket": {
+        "Type": "AWS::S3::Bucket",
+             "Properties": {
+                 "BucketName" : "cdp-training-bucket",
+                 "Tags" :[{
+                             "Key":"user",
+                             "Value":"Pranjali"
+                          },
+                          {
+                             "Key":"email",
+                             "Value":"pranjali.mehta@quantiphi.com"
+                          },
+                           {
+                             "Key":"Project",
+                             "Value":"LMI-CDP-Training"
+                          },
+                          {
+                            "Key": "Office-time",
+                            "Value" : "Mumbai-14"
+                          }]
+                }
+        },
+        "MyDB" : {
+
+            "Type" : "AWS::RDS::DBInstance",
+             "Properties" : {
+                     "DBName" : "cdptdb",
+                     "AllocatedStorage" : "100",
+                     "DBInstanceClass" : "db.t2.micro",
+                     "Engine" : "oracle-ee",
+                     "MasterUsername" : "master",
+                     "MasterUserPassword" : "SecretPassword01",
+                      "Tags" :[{
+                                     "Key":"user",
+                                     "Value":"Pranjali"
+                                  },
+                                  {
+                                     "Key":"email",
+                                     "Value":"pranjali.mehta@quantiphi.com"
+                                  },
+                                   {
+                                     "Key":"Project",
+                                     "Value":"LMI-CDP-Training"
+                                  },
+                                  {
+                                    "Key":"Office-time",
+                                    "Value" : "Mumbai-14"
+                                  }],
+                 },
+            "DeletionPolicy" : "Snapshot"
+        },
+        "MyRepInstance" : {
+
+                  "Type" : "AWS::DMS::ReplicationInstance",
+                  "Properties" : {
+                      "AllocatedStorage" : 5,
+                      "AllowMajorVersionUpgrade" :"False" ,
+                      "AutoMinorVersionUpgrade" : "False" ,
+                      "AvailabilityZone" : "us-east-1b",
+                      "MultiAZ" : "False" ,
+                      "PubliclyAccessible" : "False" ,
+                      "ReplicationInstanceClass" : "dms.t2.micro",
+                      "ReplicationInstanceIdentifier" : "cdp-training-repinstance",
+                       "Tags" :[{
+                         "Key":"user",
+                         "Value":"Pranjali"
+                                },
+                      {
+                         "Key":"email",
+                         "Value":"pranjali.mehta@quantiphi.com"
+                      },
+                       {
+                         "Key":"Project",
+                         "Value":"LMI-CDP-Training"
+                      },
+                        {
+                        "Key":"Office-time",
+                        "Value" : "Mumbai-14"
+                      }]  },
+                  "DependsOn" : ["MyDB" , "AppBucket"]
+        },
+
+        "Oraclesourceendpoint" : {
+            "Type": "AWS::DMS::Endpoint",
+            "Properties": {
+                "EngineName": "oracle",
+                "EndpointType": "source",
+                "Username": "master",
+                "Password": "SecretPassword01",
+                "ServerName": "source.db.amazon.com",
+                // "ServiceName" : "cdptdb",
+                "Port" : 1521,
+                "DatabaseName": "cdptdb",
+                "Tags" :[{
+                                     "Key":"user",
+                                     "Value":"Pranjali"
+                                  },
+                                  {
+                                     "Key":"email",
+                                     "Value":"pranjali.mehta@quantiphi.com"
+                                  },
+                                   {
+                                     "Key":"Project",
+                                     "Value":"LMI-CDP-Training"
+                                  },
+                                  {
+                                    "Key":"Office-time",
+                                    "Value" : "Mumbai-14"
+                                  }]
+                },
+                 "DependsOn" : "MyDB" 
+  },
+     "S3targetendpoint" : {
+
+              "Type": "AWS::DMS::Endpoint",
+              "Properties": {
+                  "EngineName": "s3",
+                  "EndpointType": "target",
+                  "S3Settings" : {
+                    "BucketName" : "cdp-training-bucket",
+                    "ServiceAccessRoleArn" : "arn:aws:iam::130159455024:role/Aws-Developer-Role"
+                  },
+                  "Tags" :[{
+                                     "Key":"user",
+                                     "Value":"Pranjali"
+                                  },
+                                  {
+                                     "Key":"email",
+                                     "Value":"pranjali.mehta@quantiphi.com"
+                                  },
+                                   {
+                                     "Key":"Project",
+                                     "Value":"LMI-CDP-Training"
+                                  },
+                                  {
+                                    "Key":"Office-time",
+                                    "Value" : "Mumbai-14"
+                                  }]
+                },
+             "DependsOn" : "AppBucket" 
+  },
+"Taskcdptraining" : {
+  "Type" : "AWS::DMS::ReplicationTask",
+  "Properties" : {
+     
+      "MigrationType" : "full-load",
+      "ReplicationInstanceArn" : { "Ref": "MyRepInstance" },
+      "ReplicationTaskIdentifier" : "cdp-training-task",
+     
+      "SourceEndpointArn" : { "Ref": "Oraclesourceendpoint" },
+       "TableMappings": "{ \"rules\": [ { \"rule-type\": \"selection\", \"rule-id\": \"1\", \"rule-name\": \"1\", \"object-locator\": { \"schema-name\": \"%\", \"table-name\": \"%\" }, \"rule-action\": \"include\" } ] }",
+      "TargetEndpointArn" : { "Ref": "S3targetendpoint" },
+      "Tags" :[{
+                                     "Key":"user",
+                                     "Value":"Pranjali"
+                                  },
+                                  {
+                                     "Key":"email",
+                                     "Value":"pranjali.mehta@quantiphi.com"
+                                  },
+                                   {
+                                     "Key":"Project",
+                                     "Value":"LMI-CDP-Training"
+                                  },
+                                  {
+                                    "Key":"Office-time",
+                                    "Value" : "Mumbai-14"
+                                  }]
+    },
+     "DependsOn" : ["MyRepInstance" , "Oraclesourceendpoint", "S3targetendpoint"]
+}
+}
+}
