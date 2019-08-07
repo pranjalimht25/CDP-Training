@@ -1,0 +1,191 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Transform": "AWS::Serverless-2016-10-31",
+    "Resources": 
+    {
+      "cdptrainingbucket": {
+            "Type": "AWS::S3::Bucket",
+             "Properties": {
+                 "BucketName" : "cdptrainingbucket"
+                }
+        },
+
+        "cdptrainingtargetbucket": {
+            "Type": "AWS::S3::Bucket",
+             "Properties": {
+                 "BucketName" : "cdptrainingtargetbucket"
+                }
+        },
+
+        "CdpTrainingCrawler": {
+              "Type" : "AWS::Glue::Crawler",
+              "Properties" : {
+                  "DatabaseName" : "cdp-training-db-cft",
+                  "Description" : "CDP Training",
+                  "Name" : "cdp-training-crawler-cft",
+                  "Role" : "arn:aws:iam::130159455024:role/service-role/AWSGlueServiceRole-AWS_Glue_Rights_with_S3",
+                  "TablePrefix" : "cdp-cft-",
+                  "Targets": {
+                    "S3Targets": [{ "Path": "s3://cdptrainingbucket" }]
+                }
+             }
+        },
+
+        "CdpTrainingServerlessCrawler":{
+                    "Type": "AWS::Serverless::Function",
+                    "Properties": {
+                    "CodeUri": "s3://cdp-training-code/cdptraininglambdaforCrawler.zip",
+                    "FunctionName" : "CdpCrawlerLambda",
+                    "Handler": "index.handler",
+                    "Runtime": "python3.7",
+                    "Timeout": 30,
+                    "Role": "arn:aws:iam::130159455024:role/lambda_glue_fullaccess",
+                    "Policies": "AWSLambdaExecute",
+                    "Events": {
+                        "MyLambdaEvent": {
+                          "Type": "S3",
+                          "Properties": {
+                            "Bucket": {"Ref" : "cdptrainingbucket"},
+                            "Events": "s3:ObjectCreated:*"
+                          }
+                        }
+                      }
+                    }
+        },
+
+       "CdpTrainingServerlessJob":{
+                    "Type": "AWS::Serverless::Function",
+                    "DependsOn" : "cdptrainingtargetbucket",
+                    "Properties": {
+                      "CodeUri": "s3://cdp-training-code/cdptraininglambdaforJob.zip",
+                      "FunctionName" : "CdpJobLambda",
+                    "Handler": "index.handler",
+                    "Runtime": "python3.7",
+                    "Timeout": 30,
+                    "Role": "arn:aws:iam::130159455024:role/lambda_glue_fullaccess",
+                    "Policies": "AWSLambdaExecute"
+                    }
+        },
+
+
+    "ScheduledRule": {
+      "Type": "AWS::Events::Rule",
+      "DependsOn" : "CdpTrainingServerlessJob",
+      "Properties": {
+        "Name" : "cdp-training-rule",
+        "Description": "CDP Training Scheduled Rule",
+        "EventPattern": "{\"detail-type\": [\"Glue Crawler State Change\"],\"source\": [\"aws.glue\" ],\"detail\": {\"crawlerName\": [\"cdp-training-crawler-cft\"],  \"state\": [\"Succeeded\"]    }}",
+        "State": "ENABLED",
+        "Targets": [{
+          "Arn": { "Fn::GetAtt": ["CdpTrainingServerlessJob", "Arn"] },
+          "Id": "cdp-training-ruleID"
+        }]
+       }
+    },
+
+        "CdpTrainingJob": {
+                    "Type": "AWS::Glue::Job",
+                    "DependsOn" : "ScheduledRule",
+                    "Properties": {
+                      "Name" : "cdp-training-job-cft",
+                      "Role" : "arn:aws:iam::130159455024:role/service-role/AWSGlueServiceRole-AWS_Glue_Rights_with_S3",
+                      "Command": {
+                        "Name": "glueetl",
+                        "ScriptLocation": "s3://aws-glue-scripts-130159455024-us-east-1/admin/"
+                      },
+                      
+                      "DefaultArguments": {
+                        "--output_path": "s3://cdp-training2",
+                        "--TempDir": "s3://aws-glue-temporary-130159455024-us-east-1/admin"
+                      }
+                    }
+        },
+
+        "CdpTrainingRedshiftCluster" :{
+          "Type": "AWS::Redshift::Cluster",
+          "Properties": {
+            "DBName": "cdp-redshift-db", 
+            "MasterUsername": "master",
+            "MasterUserPassword": "Master01",
+            "NodeType": "ds2.xlarge",
+            "ClusterType": "single-node",
+            "Tags" :[{
+                                     "Key":"user",
+                                     "Value":"Pranjali"
+                                  },
+                                  {
+                                     "Key":"email",
+                                     "Value":"pranjali.mehta@quantiphi.com"
+                                  },
+                                   {
+                                     "Key":"Project",
+                                     "Value":"LMI-CDP-Training"
+                                  },
+                                  {
+                                    "Key":"Office-time",
+                                    "Value" : "Mumbai-14"
+                                  }]
+          }
+        },
+
+      "CdpTrainingConnRedshift" : {     
+            "Type" : "AWS::Glue::Connection",
+            "DependsOn" : "CdpTrainingRedshiftCluster",
+            "Properties" : {
+                "CatalogId" : {"Ref" : "AWS::AccountId" },
+                "ConnectionInput" : {
+                                      "ConnectionProperties" : {
+                                        "JDBC_CONNECTION_URL" : "jdbc:redshift://redshiftpoc.coovtxddmae6.us-east-1.redshift.amazonaws.com:5439/cdp-redshift-db",
+                                        //"redshiftTmpDir" : "s3://aws-glue-temporary-130159455024-us-east-1/admin",
+                                        "USERNAME" : "master",
+                                        "PASSWORD" : "master01"
+                                        },
+                                     "ConnectionType" : "JDBC",
+                                     "Name" : "CdpRedshiftConnection",
+                        
+                                   } 
+                 }
+        },
+
+      "CdpTrainingServerlessRedshiftJob":{
+                    "Type": "AWS::Serverless::Function",
+                    //"DependsOn" : "cdptrainingtargetbucket",
+                    "Properties": {
+                      "CodeUri": "s3://cdp-training-code/cdptraininglambdaforRedshiftJob.zip",
+                      "FunctionName" : "CdpRedshiftLambda",
+                    "Handler": "index.handler",
+                    "Runtime": "python3.7",
+                    "Timeout": 30,
+                    "Role": "arn:aws:iam::130159455024:role/lambda_glue_fullaccess",
+                    "Policies": "AWSLambdaExecute",
+                    "Events": {
+                        "MyLambdaRedshiftEvent": {
+                          "Type": "S3",
+                          "Properties": {
+                            "Bucket": {"Ref" : "cdptrainingtargetbucket"},
+                            "Events": "s3:ObjectCreated:*"
+                          }
+                        }
+                      }
+                    }
+        },
+
+           "CdpTrainingJobforRedshift": {
+                    "Type": "AWS::Glue::Job",
+                    "DependsOn" : "CdpTrainingConnRedshift",
+                    "Properties": {
+                      "Name" : "cdp-training-job-redshift-cft",
+                      "Role" : "arn:aws:iam::130159455024:role/service-role/AWSGlueServiceRole-AWS_Glue_Rights_with_S3",
+                      "Connections" : {"Connections" : [{"Ref" : "CdpTrainingConnRedshift"}]}  ,
+                      "Command": {
+                        "Name": "glueetl",
+                        "ScriptLocation": "s3://aws-glue-scripts-130159455024-us-east-1/admin/"
+                      },
+                      
+                      "DefaultArguments": {
+                        "--TempDir": "s3://aws-glue-temporary-130159455024-us-east-1/admin"
+                      }
+                    }
+        },
+ }
+}
